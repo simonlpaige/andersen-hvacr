@@ -13,7 +13,7 @@
         owner: "Max Andersen",
         phone: "(816) 308-8796",
         phoneRaw: "8163088796",
-        email: "",
+        email: "e.andersen916@gmail.com",
         tagline: "Commercial Kitchen & HVAC Service",
         baseZip: "64113",
         radiusMiles: 20,
@@ -252,9 +252,72 @@
                     e.preventDefault();
                     var firstInvalid = form.querySelector('[aria-invalid="true"]');
                     if (firstInvalid) firstInvalid.focus();
+                    return;
+                }
+
+                // If endpoint is configured, try posting to it first.
+                // Fall back to native mailto submission if the endpoint is missing or errors.
+                var endpoint = form.getAttribute('data-endpoint');
+                if (endpoint) {
+                    e.preventDefault();
+                    submitViaEndpoint(form, endpoint);
                 }
             });
         });
+    }
+
+    function submitViaEndpoint(form, endpoint) {
+        var btn = form.querySelector('button[type="submit"]');
+        var original = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+        // Gather fields
+        var payload = {
+            client: form.getAttribute('data-client') || 'unknown',
+            to:     form.getAttribute('data-to') || '',
+            cc:     form.getAttribute('data-cc') || '',
+            fields: {}
+        };
+        Array.prototype.forEach.call(form.querySelectorAll('input, select, textarea'), function (el) {
+            if (!el.name) return;
+            payload.fields[el.name] = el.value;
+        });
+
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () { controller.abort(); }, 8000);
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        })
+        .then(function (res) {
+            clearTimeout(timeoutId);
+            if (!res.ok) throw new Error('Endpoint returned ' + res.status);
+            return res.json().catch(function () { return {}; });
+        })
+        .then(function () {
+            showFormSuccess(form, "Thanks - message sent. Max will reach out shortly. For urgent issues, call (816) 308-8796.");
+            form.reset();
+            if (btn) { btn.disabled = false; btn.textContent = original; }
+        })
+        .catch(function () {
+            // Endpoint unreachable or errored. Fall back to native mailto submit.
+            if (btn) { btn.disabled = false; btn.textContent = original; }
+            form.submit();
+        });
+    }
+
+    function showFormSuccess(form, message) {
+        var existing = form.querySelector('.form-success');
+        if (existing) existing.remove();
+        var note = document.createElement('div');
+        note.className = 'form-success';
+        note.setAttribute('role', 'status');
+        note.style.cssText = 'background:#e8f5e9;border:1px solid #3A7D44;color:#1f2937;border-radius:8px;padding:1rem 1.25rem;margin-top:1rem;';
+        note.textContent = message;
+        form.appendChild(note);
     }
 
     function showError(input, message) {
